@@ -1,0 +1,222 @@
+---
+title: "Ensemble Learning in R for Continuous Response"
+author: "Srijit Mukherjee"
+date: "27 July 2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libraries
+
+* library(ISLR)
+* library(MASS)
+* library(tree)
+* library(randomForest)
+* library(gbm)
+* library(adabag)
+* library(caret)
+* library(corrplot)
+
+```{r,  include=FALSE}
+library(ISLR)
+library(MASS)
+library(tree)
+library(randomForest)
+library(gbm)
+library(adabag)
+library(caret)
+library(corrplot)
+```
+
+We will be using the data set Boston Data Set in ISLR package. Let's explore the data.
+
+# Dataset: Boston
+
+This dataset contains information collected by the U.S Census Service concerning housing in the area of Boston Mass.
+
+There are 14 attributes in each case of the dataset. They are:
+
+
+* CRIM - per capita crime rate by town
+* ZN - proportion of residential land zoned for lots over 25,000 sq.ft.
+* INDUS - proportion of non-retail business acres per town.
+* CHAS - Charles River dummy variable (1 if tract bounds river; 0 otherwise)
+* NOX - nitric oxides concentration (parts per 10 million)
+* RM - average number of rooms per dwelling
+* AGE - proportion of owner-occupied units built prior to 1940
+* DIS - weighted distances to five Boston employment centres
+* RAD - index of accessibility to radial highways
+* TAX - full-value property-tax rate per $10,000
+* PTRATIO - pupil-teacher ratio by town
+* B - 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town
+* LSTAT - % lower status of the population
+* MEDV - Median value of owner-occupied homes in $1000's
+
+```{r}
+head(Boston)
+str(Boston)
+```
+
+
+# Goal
+
+Predict Price (MEDV)
+
+## Train and Test Data Set
+
+```{r}
+train = sample (1:nrow(Boston), nrow(Boston)/2)
+boston.test=Boston[-train ,"medv"]
+```
+
+
+We will apply the following methods on the same data set and compare them.
+
+* Decision Tree
+* Bagging
+* Random Forest (Bagging + Decorrelate)
+* Boosting
+
+# Decision Tree
+
+Fit the model
+
+```{r}
+set.seed(1)
+tree.boston = tree(medv ~., Boston ,subset =train)
+```
+
+The summary of the Regression Tree
+
+```{r}
+summary (tree.boston )
+```
+
+The Plot of the Decision Tree
+
+```{r}
+plot(tree.boston)
+text(tree.boston, pretty = 0)
+```
+
+The Plot of the Cross Validation Deviance
+
+```{r}
+cv.boston =cv.tree(tree.boston)
+plot(cv.boston$size ,cv.boston$dev ,type= "b")
+```
+
+After Pruning and setting the number of leaf nodes to be 5.
+
+```{r}
+prune.boston = prune.tree(tree.boston, best = "5")
+plot(prune.boston)
+text(prune.boston ,pretty =0)
+```
+
+Performance
+
+```{r}
+yhat=predict (tree.boston ,newdata =Boston [-train ,])
+plot(yhat ,boston.test)
+abline (0,1)
+mean((yhat -boston.test)^2)
+```
+
+
+# Bagging
+
+Prediction with Bagging
+
+```{r}
+set.seed(2)
+bag.boston= randomForest(medv~., data = Boston, subset=train, mtry=13,importance =TRUE)
+yhat.bag = predict(bag.boston , newdata = Boston[-train ,])
+mean((yhat.bag - boston.test)^2)
+```
+
+Visualize the performance of the Bagging
+
+```{r}
+summary(bag.boston)
+plot(yhat.bag, boston.test)
+abline (0,1)
+```
+
+Change in the number of trees: Performance Measure
+
+```{r}
+bag.boston= randomForest(medv~., data = Boston, subset=train, mtry=13,importance =TRUE, ntree = 25)
+yhat.bag = predict (bag.boston , newdata = Boston[-train ,])
+mean((yhat.bag - boston.test)^2)
+```
+
+
+# Random Forest
+
+```{r}
+corrplot(cor(Boston))
+```
+
+Change in the random feature selection
+
+```{r}
+rf.boston= randomForest(medv~., data = Boston, subset=train, mtry=6,importance =TRUE, ntree = 25)
+yhat.bag = predict (rf.boston , newdata = Boston[-train ,])
+mean((yhat.bag - boston.test)^2)
+```
+
+Variable Importance Plot
+
+```{r}
+importance(rf.boston)
+varImpPlot (rf.boston)
+```
+
+How the number of trees result in the error?
+
+```{r}
+error_ntree = NULL
+
+for (n in 1:100)
+{
+rf.boston= randomForest(medv~., data = Boston, subset=train, mtry=6, importance =TRUE, ntree = n)
+yhat.bag = predict (rf.boston , newdata = Boston[-train ,])
+error_ntree = c(error_ntree, mean((yhat.bag - boston.test)^2))
+}
+plot(error_ntree)
+```
+
+
+How the number of predictor selection result in the error?
+
+```{r}
+error_mtry = NULL
+
+for (n in 1:(ncol(Boston)-1))
+  
+{
+rf.boston= randomForest(medv~., data = Boston, subset=train, mtry=6, importance =TRUE, ntree = n)
+yhat.bag = predict (rf.boston , newdata = Boston[-train ,])
+error_mtry = c(error_mtry, mean((yhat.bag - boston.test)^2))
+}
+plot(error_mtry)
+```
+
+
+
+# Gradient Boosting
+
+```{r}
+set.seed (3)
+boost.boston =gbm(medv ~ ., data= Boston[train ,], distribution = "gaussian", n.trees =5000 , interaction.depth =4)
+summary (boost.boston )
+par(mfrow =c(1,2))
+plot(boost.boston ,i="rm")
+plot(boost.boston ,i="lstat")
+yhat.boost=predict (boost.boston ,newdata =Boston [-train ,],n.trees =5000)
+mean(( yhat.boost -boston.test)^2)
+```
